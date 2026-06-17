@@ -38,7 +38,6 @@ tanbuyur/
 ├── ingestion_pipeline.ipynb      # Notebook Colab: PDF → Qdrant Cloud
 ├── README.md
 ├── requirements.txt
-├── runtime.txt                   # Pin Python 3.11 untuk Streamlit Cloud
 ├── .gitignore
 ├── .streamlit/
 │   └── secrets.toml.example     # Template secrets (jangan commit yang asli!)
