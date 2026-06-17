@@ -26,9 +26,7 @@ Chatbot pertanian berbasis **Retrieval-Augmented Generation (RAG)** yang menjawa
 
 ## Arsitektur
 
-```
-
-(/pipeline_rag_tanbuyur.png)
+![Pipeline RAG Tanbuyur](pipeline_rag_tanbuyur.png)
 
 ---
 
@@ -36,12 +34,16 @@ Chatbot pertanian berbasis **Retrieval-Augmented Generation (RAG)** yang menjawa
 
 ```
 tanbuyur/
-├── app.py
-├── ingestion_pipeline.ipynb
+├── app.py                        # Aplikasi Streamlit utama
+├── ingestion_pipeline.ipynb      # Notebook Colab: PDF → Qdrant Cloud
 ├── README.md
 ├── requirements.txt
-└── .gitignore
- 
+├── runtime.txt                   # Pin Python 3.11 untuk Streamlit Cloud
+├── .gitignore
+├── .streamlit/
+│   └── secrets.toml.example     # Template secrets (jangan commit yang asli!)
+└── logs/
+    └── chat_log.jsonl            # Dibuat otomatis saat ada query
 ```
 
 ---
