@@ -1,6 +1,6 @@
 # Core LLM & RAG
 groq==0.13.0
-chromadb==0.5.23
+qdrant-client==1.9.1
 sentence-transformers==2.7.0
 
 # Versi pinned — cegah konflik di Streamlit Cloud

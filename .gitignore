@@ -31,7 +31,7 @@ ENV/
 *.ipynb_metadata/
 
 # ChromaDB vector store
-# chroma_db/
+chroma_db/
 chroma_store/
 
 # Streamlit
