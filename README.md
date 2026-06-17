@@ -26,15 +26,12 @@ Chatbot pertanian berbasis **Retrieval-Augmented Generation (RAG)** yang menjawa
 
 ## Arsitektur
 
-```
-
 (/pipeline_rag_tanbuyur.png)
 
 ---
 
 ## Struktur Proyek
 
-```
 tanbuyur/
 ├── app.py
 ├── ingestion_pipeline.ipynb
@@ -42,7 +39,7 @@ tanbuyur/
 ├── requirements.txt
 └── .gitignore
  
-```
+
 
 ---
 
