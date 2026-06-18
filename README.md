@@ -12,14 +12,17 @@ Chatbot pertanian berbasis **Retrieval-Augmented Generation (RAG)** yang menjawa
 
 | Fitur | Detail |
 |---|---|
-| 📚 Knowledge base | *Petunjuk Teknis Budidaya Tanaman Sayuran* — 142 halaman, 722 chunk |
+| 📚 Knowledge base | *Petunjuk Teknis Budidaya Tanaman Sayuran* — 142 halaman, 722 chunk, 30 jenis sayuran |
 | 🔍 Vector store | Qdrant Cloud — cosine similarity, remote & scalable |
 | 🌐 Embedding | `paraphrase-multilingual-MiniLM-L12-v2` — mendukung Bahasa Indonesia & Inggris |
 | 🤖 LLM | Groq — Llama 3.1 8B Instant |
 | 🧠 Multi-turn memory | 6 turn terakhir diingat per sesi |
 | 📊 Relevance scoring | Skor cosine per chunk ditampilkan sebagai badge di setiap jawaban |
 | 🌏 Deteksi bahasa | Query Indonesia/Inggris dideteksi otomatis, jawaban menyesuaikan |
-| 📋 Chat log | Setiap sesi tersimpan ke `logs/chat_log.jsonl` dengan metadata lengkap |
+| 🛡️ Guardrail Python | Validasi tanaman sebelum ke LLM — topik di luar DB tidak sampai ke Groq |
+| 🔄 Query expansion | Sinonim otomatis: "nanam" → "budidaya penanaman", "hama" → "OPT", dll. |
+| 🏷️ Answer mode badge | Setiap jawaban dibadge: 🟢 Dokumen / 🔴 Luar Database / 🔵 Daftar Isi |
+| 📋 Chat log | Setiap sesi tersimpan ke `logs/chat_log.jsonl` + `plant_detected` & `retrieval_success` |
 | 🚀 Deployment | Streamlit Cloud + Qdrant Cloud — serverless, tanpa file lokal |
 
 ---
@@ -101,13 +104,14 @@ streamlit run app.py
 Semua parameter utama ada di bagian `CONFIG` di `app.py`:
 
 ```python
-COLLECTION_NAME  = "sayuran_kb"
-EMBED_MODEL      = "paraphrase-multilingual-MiniLM-L12-v2"
-EMBED_DIM        = 384
-GROQ_MODEL       = "llama-3.1-8b-instant"
-TOP_K            = 5       # Jumlah chunk diambil dari Qdrant
-MIN_RELEVANCE    = 0.35    # Threshold cosine similarity minimum
-MAX_MEMORY_TURNS = 6       # Turn percakapan yang disimpan sebagai memori
+COLLECTION_NAME      = "sayuran_kb"
+EMBED_MODEL          = "paraphrase-multilingual-MiniLM-L12-v2"
+EMBED_DIM            = 384
+GROQ_MODEL           = "llama-3.1-8b-instant"
+TOP_K                = 5       # Jumlah chunk diambil dari Qdrant
+MIN_RELEVANCE        = 0.35    # Threshold minimum retrieval
+RAG_SCORE_THRESHOLD  = 0.50    # Di bawah ini = out-of-domain, tidak panggil LLM
+MAX_MEMORY_TURNS     = 6       # Turn percakapan yang disimpan sebagai memori
 ```
 
 ---
@@ -122,6 +126,9 @@ Setiap query tersimpan ke `logs/chat_log.jsonl`:
   "session_id": "a1b2c3d4",
   "query": "cara menanam cabai",
   "answer": "...",
+  "answer_mode": "RAG",
+  "plant_detected": "cabai",
+  "retrieval_success": true,
   "top_chunk_score": 0.82,
   "chunks_used": 4,
   "sources": [
@@ -131,6 +138,8 @@ Setiap query tersimpan ke `logs/chat_log.jsonl`:
   "tokens": {"prompt": 1204, "completion": 312, "total": 1516}
 }
 ```
+
+`answer_mode` bisa berisi `"RAG"`, `"OUT_OF_SCOPE"`, atau `"CATALOG"`. Field `plant_detected` dan `retrieval_success` memungkinkan analitik lanjutan — misalnya tanaman apa yang paling sering ditanyakan, atau berapa persen query berada di luar knowledge base.
 
 ---
 
@@ -157,32 +166,47 @@ Percakapan tentang kelor berlanjut lebih dari 5 turn — dari cara tanam, masaka
 Ketika user menyampaikan bahwa Chaya beracun jika tidak direbus, bot merespons dengan benar dan menyesuaikan jawaban selanjutnya (termasuk mengingatkan hal tersebut di pesan penutup).
 
 **Fallback ke general knowledge transparan**
-Untuk topik di luar database (kelor, chaya, kenikir), bot tetap menjawab dari pengetahuan umum LLM dengan skor retrieval rendah (~37–55%) — menunjukkan sistem berfungsi sebagaimana mestinya.
+Untuk topik di luar database (kelor, chaya, kenikir), bot menjawab dari pengetahuan umum LLM dengan skor retrieval rendah (~37–55%). Perilaku ini kemudian diperbaiki di versi berikutnya (lihat bagian Peningkatan v2).
 
 ---
 
-### ⚠️ Temuan & Keterbatasan
+### ⚠️ Temuan & Keterbatasan (v1)
 
 **1. Sayuran lokal populer tidak ada dalam database**
-Kelor, chaya, dan kenikir tidak tercakup dalam PDF sumber. Bot menjawab dari pengetahuan umum LLM (bukan dari dokumen), sehingga akurasi tidak terjamin sepenuhnya untuk topik ini.
+Kelor, chaya, dan kenikir tidak tercakup dalam PDF sumber. Bot menjawab dari pengetahuan umum LLM, sehingga akurasi tidak terjamin untuk topik ini.
 
 **2. Halusinasi nama latin**
-Ketika ditanya soal kenikir, bot menyebutkan nama latin *Hibiscus sabdariffa* yang merupakan rosella, bukan kenikir (*Cosmos caudatus*). Ini adalah contoh klasik LLM hallucination untuk topik di luar konteks RAG.
+Ketika ditanya soal kenikir, bot menyebutkan nama latin *Hibiscus sabdariffa* yang merupakan rosella, bukan kenikir (*Cosmos caudatus*). Contoh klasik LLM hallucination untuk topik di luar konteks RAG.
 
 **3. Skor "cara menanam cabai" lebih rendah (59.5%)**
-PDF menggunakan istilah teknis seperti "budidaya" dan "penanaman" — bukan "menanam". Query berbahasa sehari-hari dapat menurunkan skor retrieval meski topiknya ada. Dapat diatasi dengan query expansion atau synonym mapping.
+PDF menggunakan istilah teknis "budidaya" dan "penanaman" — bukan "menanam". Query sehari-hari menurunkan skor retrieval meski topiknya ada.
 
 **4. Chunk terpotong di tengah kalimat**
-Beberapa chunk yang muncul di source badge terlihat terpotong di awal/akhir karena chunking berbasis karakter. Chunking berbasis kalimat atau paragraf akan meningkatkan kualitas konteks.
+Chunking berbasis karakter menyebabkan beberapa chunk terpotong. Chunking berbasis paragraf/semantik akan meningkatkan kualitas konteks.
 
 ---
 
-### 💡 Rekomendasi Pengembangan
+### 🚀 Peningkatan v2 (berdasarkan temuan uji)
 
-- Tambahkan sumber PDF tambahan yang mencakup tanaman lokal (kelor, kenikir, chaya, dll.)
-- Implementasi query expansion — misal "menanam" → "budidaya, penanaman, tanam"
+Seluruh temuan di atas ditindaklanjuti dengan upgrade berikut:
+
+| Masalah | Solusi yang Diimplementasikan |
+|---|---|
+| Halusinasi topik luar DB | `KNOWN_PLANTS` set + validasi Python sebelum ke LLM |
+| Skor rendah = masih sampai LLM | `RAG_SCORE_THRESHOLD = 0.50` — di bawah ini tidak panggil Groq |
+| User tidak tahu sumber jawaban | Badge 🟢 Dokumen / 🔴 Luar DB / 🔵 Daftar Isi per jawaban |
+| Gap kosakata sehari-hari vs teknis | `QUERY_SYNONYMS` + `expand_query()` — "nanam" → "budidaya penanaman" |
+| Log kurang informatif | Tambah `plant_detected`, `retrieval_success`, `oos_pct` di sidebar |
+| Token terbuang untuk topik luar DB | Out-of-scope → jawaban hardcoded, 0 token Groq terpakai |
+
+---
+
+### 💡 Rekomendasi Pengembangan Lanjutan
+
+- Tambahkan sumber PDF untuk tanaman lokal (kelor, kenikir, chaya, dll.)
 - Ganti chunking karakter ke chunking berbasis paragraf/semantik
-- Tambahkan fitur feedback (👍👎) per jawaban untuk evaluasi kualitas RAG secara berkelanjutan
+- Tambahkan fitur feedback (👍👎) per jawaban untuk evaluasi berkelanjutan
+- Dashboard analitik dari log: tanaman paling sering ditanya, tren query OOS
 
 ---
 
