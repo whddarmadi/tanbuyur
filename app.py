@@ -38,18 +38,19 @@ Jamur              : Jamur Merang, Jamur Kayu (Tiram, Kuping, Shiitake)"""
 # ── Set untuk validasi Python (poin 1 GPT) ────────────────────────────────────
 KNOWN_PLANTS = {
     # bawang
-    "bawang daun", "bawang merah", "bawang putih",
+    "bawang daun", "bawang merah", "bawang putih", "bawang",
     # daun
     "bayam", "caisin", "kailan", "kaelan", "kangkung", "katuk",
     "pakchoi", "pakcoy", "petsai", "selada", "seledri",
     # buah
-    "cabai", "cabai merah", "cabai rawit", "cabe", "kacang panjang",
-    "labu siam", "mentimun", "timun", "oyong", "paria", "pare",
+    "cabai", "cabe", "cabai merah", "cabai rawit", "cabe merah", "cabe rawit",
+    "cabe keriting", "cabai keriting", "lombok",
+    "kacang panjang", "labu siam", "mentimun", "timun", "oyong", "paria", "pare",
     "terung", "terong", "tomat",
     # umbi
     "kentang", "wortel",
     # kubis
-    "brokoli", "kubis", "kubis bunga", "kembang kol",
+    "brokoli", "kubis", "kubis bunga", "kembang kol", "kol",
     # kacang
     "buncis", "kapri", "ercis",
     # jamur
@@ -201,10 +202,11 @@ def expand_query(query: str) -> str:
 def detect_plant(query: str) -> str | None:
     """
     Deteksi nama tanaman dalam query (poin 1).
+    Sort by length descending — "cabai merah" menang vs "cabai".
     Return nama tanaman jika ditemukan, None jika tidak.
     """
     q_lower = query.lower()
-    for plant in KNOWN_PLANTS:
+    for plant in sorted(KNOWN_PLANTS, key=len, reverse=True):
         if plant in q_lower:
             return plant
     return None
@@ -521,24 +523,26 @@ if query:
             answer_mode = "CATALOG"
 
         else:
-            # ── Poin 1: Validasi Python — cek tanaman dikenal ────────────────
             chunks = retrieve_context(qdrant, embed_model, query)
 
-            # ── Poin 2 & 6: Cek skor threshold — kalau rendah, stop di sini ─
-            if not chunks or chunks[0]["score"] < RAG_SCORE_THRESHOLD:
-                plant_name = plant or "tanaman tersebut"
+            # ── Poin 2 & 6: Evaluasi skor + keberadaan tanaman ───────────────
+            top_score  = chunks[0]["score"] if chunks else 0
+            in_db      = plant is not None  # tanaman dikenal di KNOWN_PLANTS
+
+            if not in_db and top_score < RAG_SCORE_THRESHOLD:
+                # Topik benar-benar di luar DB — tidak panggil LLM
                 answer = (
-                    f"Maaf, informasi tentang **{plant_name}** tidak tersedia "
+                    f"Maaf, informasi tentang topik tersebut tidak tersedia "
                     f"dalam database Tanbuyur.\n\n"
                     f"Database Tanbuyur hanya mencakup **30 jenis sayuran** berikut:\n\n"
                     f"{KNOWLEDGE_BASE_CATALOG}\n\n"
                     f"Silakan tanyakan tentang salah satu sayuran di atas! 🌿"
                 )
                 answer_mode = "OUT_OF_SCOPE"
-                chunks      = []  # tidak tampilkan source badge
+                chunks      = []
 
             else:
-                # ── RAG normal — panggil LLM ──────────────────────────────────
+                # ── RAG normal — tanaman dikenal ATAU skor cukup → panggil LLM
                 context  = build_context_string(chunks)
                 memory   = build_memory_string(st.session_state.messages[:-1])
                 answer, prompt_tok, comp_tok = call_llm(
