@@ -183,6 +183,9 @@ PDF menggunakan istilah teknis "budidaya" dan "penanaman" — bukan "menanam". Q
 **4. Chunk terpotong di tengah kalimat**
 Chunking berbasis karakter menyebabkan beberapa chunk terpotong. Chunking berbasis paragraf/semantik akan meningkatkan kualitas konteks.
 
+**5. Ejaan tidak baku tidak dikenali guardrail**
+"Cabe" (bukan "cabai") dan varian seperti "cabe keriting" tidak ada di `KNOWN_PLANTS`, sehingga query valid tentang cabai justru mendapat respons OUT_OF_SCOPE. Guardrail berbasis exact string match terlalu kaku untuk variasi ejaan bahasa sehari-hari.
+
 ---
 
 ### 🚀 Peningkatan v2 (berdasarkan temuan uji)
@@ -197,6 +200,8 @@ Seluruh temuan di atas ditindaklanjuti dengan upgrade berikut:
 | Gap kosakata sehari-hari vs teknis | `QUERY_SYNONYMS` + `expand_query()` — "nanam" → "budidaya penanaman" |
 | Log kurang informatif | Tambah `plant_detected`, `retrieval_success`, `oos_pct` di sidebar |
 | Token terbuang untuk topik luar DB | Out-of-scope → jawaban hardcoded, 0 token Groq terpakai |
+| Ejaan tidak baku ("cabe", "terong") | Tambah varian ejaan ke `KNOWN_PLANTS` + `detect_plant()` sort by length |
+| Logika guardrail terlalu kaku | Flag `in_db` — tanaman dikenal tetap sampai LLM meski skor retrieval rendah |
 
 ---
 
